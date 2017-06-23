@@ -37,6 +37,11 @@
 #include "IOWrapper/Pangolin/PangolinDSOViewer.h"
 #include "IOWrapper/OutputWrapper/SampleOutputWrapper.h"
 
+#include "IMU/configparam.h"
+#include "IMU/imudata.h"
+
+#include "MsgSync/MsgSynchronizer.h"
+
 
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
@@ -49,6 +54,8 @@
 std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
+std::string configFile = "";
+
 bool useSampleOutput=false;
 
 using namespace dso;
@@ -127,6 +134,13 @@ void parseArgument(char* arg)
 		return;
 	}
 
+	if(1==sscanf(arg,"config=%s",buf))
+	{
+		configFile = buf;
+		printf("loading gammaCalib from %s!\n", configFile.c_str());
+		return;
+	}
+
 	printf("could not parse argument \"%s\"!!\n", arg);
 }
 
@@ -177,6 +191,10 @@ int main( int argc, char** argv )
 
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
 
+	if (configFile.empty())
+	{
+		printf("Config file location missing\n");
+	}
 
 	setting_desiredImmatureDensity = 1000;
 	setting_desiredPointDensity = 1200;
@@ -221,9 +239,45 @@ int main( int argc, char** argv )
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
 
     ros::NodeHandle nh;
-    ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
 
-    ros::spin();
+    // --------------------------------- Configs --------------------------------- //
+    dso_vi::ConfigParam config(configFile);
+    // 3dm imu output per g. 1g=9.80665 according to datasheet
+    const double g3dm = 9.80665;
+    const bool bAccMultiply98 = config.GetAccMultiply9p8();
+    const double nAccMultiplier = config.GetAccMultiply9p8() ? g3dm : 1;
+
+    dso_vi::MsgSynchronizer msgsync( config.GetImageDelayToIMU() );
+
+    ros::Subscriber imgSub = nh.subscribe(config._imageTopic, 2, &dso_vi::MsgSynchronizer::imageCallback, &msgsync);
+    ros::Subscriber imuSub = nh.subscribe(config._imuTopic, 200, &dso_vi::MsgSynchronizer::imuCallback, &msgsync);
+
+    sensor_msgs::ImageConstPtr imageMsg;
+    std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
+
+    while (ros::ok())
+    {
+    	bool bdata = msgsync.getRecentMsgs(imageMsg, vimuMsg);
+    	
+    	if (bdata)
+    	{
+    		std::vector<dso_vi::IMUData> vimuData;
+    		for (sensor_msgs::ImuConstPtr &imuMsg: vimuMsg)
+    		{
+    			vimuData.push_back(
+    				dso_vi::IMUData(
+    					imuMsg->angular_velocity.x, imuMsg->angular_velocity.y, imuMsg->angular_velocity.z,
+    					imuMsg->linear_acceleration.x * nAccMultiplier,
+    					imuMsg->linear_acceleration.y * nAccMultiplier,
+    					imuMsg->linear_acceleration.z * nAccMultiplier,
+    					imuMsg->header.stamp.toSec()
+    				)
+    			);
+    		}
+    		ROS_INFO("%d IMU message between the images", vimuData.size());
+    	}
+    	ros::spinOnce();
+    }
 
     for(IOWrap::Output3DWrapper* ow : fullSystem->outputWrapper)
     {

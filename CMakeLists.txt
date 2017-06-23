@@ -42,10 +42,12 @@ set(CMAKE_CXX_FLAGS
 
 set(SOURCE_FILES         
   src/main.cpp
+  src/MsgSync/MsgSynchronizer.cpp
 )
 
 include_directories(
   ${PROJECT_SOURCE_DIR}/src
+  ${PROJECT_SOURCE_DIR}/src/MsgSync
   ${DSO_PATH}/src
   ${DSO_PATH}/thirdparty/Sophus
   ${Pangolin_INCLUDE_DIRS}
