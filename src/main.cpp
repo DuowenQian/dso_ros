@@ -37,11 +37,12 @@
 #include "IOWrapper/Pangolin/PangolinDSOViewer.h"
 #include "IOWrapper/OutputWrapper/SampleOutputWrapper.h"
 
+#include "GroundTruthIterator/GroundTruthIterator.h"
+
 #include "IMU/configparam.h"
 #include "IMU/imudata.h"
 
 #include "MsgSync/MsgSynchronizer.h"
-
 
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
@@ -50,11 +51,22 @@
 #include <geometry_msgs/PoseStamped.h>
 #include "cv_bridge/cv_bridge.h"
 
+// GTSAM related includes.
+#include <gtsam/navigation/CombinedImuFactor.h>
+#include <gtsam/navigation/GPSFactor.h>
+#include <gtsam/navigation/ImuFactor.h>
+#include <gtsam/slam/dataset.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/slam/PriorFactor.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/inference/Symbol.h>
 
 std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
 std::string configFile = "";
+std::string groundTruthFile = "";
 
 bool useSampleOutput=false;
 
@@ -137,7 +149,14 @@ void parseArgument(char* arg)
 	if(1==sscanf(arg,"config=%s",buf))
 	{
 		configFile = buf;
-		printf("loading gammaCalib from %s!\n", configFile.c_str());
+		printf("loading config from %s!\n", configFile.c_str());
+		return;
+	}
+
+	if(1==sscanf(arg,"groundtruth=%s",buf))
+	{
+		groundTruthFile = buf;
+		printf("loading groundTruth from %s!\n", groundTruthFile.c_str());
 		return;
 	}
 
@@ -180,9 +199,6 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 }
 
 
-
-
-
 int main( int argc, char** argv )
 {
 	ros::init(argc, argv, "dso_live");
@@ -194,6 +210,13 @@ int main( int argc, char** argv )
 	if (configFile.empty())
 	{
 		printf("Config file location missing\n");
+		return 1;
+	}
+
+	if (groundTruthFile.empty())
+	{
+		printf("Groundtruth file location missing\n");
+		return 1;
 	}
 
 	setting_desiredImmatureDensity = 1000;
@@ -252,11 +275,14 @@ int main( int argc, char** argv )
     ros::Subscriber imgSub = nh.subscribe(config._imageTopic, 2, &dso_vi::MsgSynchronizer::imageCallback, &msgsync);
     ros::Subscriber imuSub = nh.subscribe(config._imuTopic, 200, &dso_vi::MsgSynchronizer::imuCallback, &msgsync);
 
+    dso_vi::GroundTruthIterator groundtruthIterator(groundTruthFile);
+
     sensor_msgs::ImageConstPtr imageMsg;
     std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
 
     while (ros::ok())
     {
+    	static double nPreviousImageTimestamp = -1;
     	bool bdata = msgsync.getRecentMsgs(imageMsg, vimuMsg);
     	
     	if (bdata)
@@ -274,7 +300,25 @@ int main( int argc, char** argv )
     				)
     			);
     		}
-    		ROS_INFO("%d IMU message between the images", vimuData.size());
+    		ROS_INFO("%ld IMU message between the images", vimuData.size());
+
+    		if (nPreviousImageTimestamp > 0)
+    		{
+    			// read the groundtruth pose between the two camera poses
+    			// the groundtruth timestamp are in nano seconds
+    			gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
+    				round(nPreviousImageTimestamp*1e9), 
+    				round(imageMsg->header.stamp.toSec()*1e9)
+    			);
+    			ROS_INFO("%f - %f t: %f, %f, %f", 
+    				nPreviousImageTimestamp,
+    				imageMsg->header.stamp.toSec(),
+    				relativePose.translation().x(), 
+    				relativePose.translation().y(), 
+    				relativePose.translation().z()
+    			);
+    		}
+    		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
     	}
     	ros::spinOnce();
     }

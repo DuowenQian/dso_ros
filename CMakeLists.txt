@@ -27,6 +27,16 @@ find_package(OpenCV 2.4 REQUIRED)
 message("\n\n---- FOUND OpenCV Headers at\n\"${OpenCV_INCLUDE_DIRS}\"")
 message("---- FOUND OpenCV Libs at\n\"${OpenCV_LIBS}\"")
 
+# Find GTSAM components
+find_package(GTSAM REQUIRED) # Uses Installed package
+include_directories($(GTSAM_INCLUDE_DIR))
+set(GTSAM_LIBRARIES gtsam)
+
+find_package(GTSAMCMakeTools)
+include(GtsamMakeConfigFile)
+include(GtsamBuildTypes)
+include(GtsamTesting)
+
 find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
 find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
@@ -54,6 +64,7 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  $(GTSAM_INCLUDE_DIR)
   
 )  
 
@@ -66,5 +77,12 @@ catkin_package(
 
 add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 add_dependencies(dso_live ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS} boost_system boost_thread)
+target_link_libraries(dso_live 
+	${DSO_LIBRARY} 
+	gtsam
+	${Pangolin_LIBRARIES} 
+	${catkin_LIBRARIES} 
+	${OpenCV_LIBS} 
+	# boost_system boost_thread 
+)
 
