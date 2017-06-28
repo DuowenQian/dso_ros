@@ -248,23 +248,23 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 				)
 			);
 		}
-		ROS_INFO("time: %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
+		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
 
 		if (nPreviousImageTimestamp > 0)
 		{
 			// read the groundtruth pose between the two camera poses
 			// the groundtruth timestamp are in nano seconds
-			// gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
-			// 	round(nPreviousImageTimestamp*1e9), 
-			// 	round(imageMsg->header.stamp.toSec()*1e9)
-			// );
-			// ROS_INFO("%f - %f t: %f, %f, %f", 
-			// 	nPreviousImageTimestamp,
-			// 	imageMsg->header.stamp.toSec(),
-			// 	relativePose.translation().x(), 
-			// 	relativePose.translation().y(), 
-			// 	relativePose.translation().z()
-			// );
+			gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
+				round(nPreviousImageTimestamp*1e9), 
+				round(imageMsg->header.stamp.toSec()*1e9)
+			);
+			ROS_INFO("%f - %f t: %f, %f, %f", 
+				nPreviousImageTimestamp,
+				imageMsg->header.stamp.toSec(),
+				relativePose.translation().x(), 
+				relativePose.translation().y(), 
+				relativePose.translation().z()
+			);
 		}
 		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
 

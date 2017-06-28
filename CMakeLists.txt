@@ -40,7 +40,8 @@ include(GtsamTesting)
 
 find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
-find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
+# find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
+set(DSO_LIBRARY ${DSO_PATH}/build/lib/libdsoDebug.so)
 message("DSO_LIB " ${DSO_LIBRARY})
 
 find_package(Boost COMPONENTS system thread) 
@@ -59,8 +60,10 @@ set(SOURCE_FILES
 include_directories(
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/src/MsgSync
+  
   ${DSO_PATH}/src
   ${DSO_PATH}/thirdparty/Sophus
+  
   ${Pangolin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${catkin_INCLUDE_DIRS}
