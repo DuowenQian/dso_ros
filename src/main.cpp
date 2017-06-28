@@ -254,9 +254,14 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 		{
 			// read the groundtruth pose between the two camera poses
 			// the groundtruth timestamp are in nano seconds
-			gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
+			
+			dso_vi::GroundTruthIterator::ground_truth_measurement_t previousState;
+			dso_vi::GroundTruthIterator::ground_truth_measurement_t currentState;
+
+			gtsam::Pose3 relativePose = groundtruthIterator.getGroundTruthBetween(
 				round(nPreviousImageTimestamp*1e9), 
-				round(imageMsg->header.stamp.toSec()*1e9)
+				round(imageMsg->header.stamp.toSec()*1e9),
+				previousState, currentState
 			);
 			ROS_INFO("%f - %f t: %f, %f, %f", 
 				nPreviousImageTimestamp,
