@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   cv_bridge
+  rosbag
 )
 
 # set(EXECUTABLE_OUTPUT_PATH ＄{PROJECT_SOURCE_DIR}/bin)

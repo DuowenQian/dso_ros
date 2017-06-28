@@ -50,6 +50,10 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/PoseStamped.h>
 #include "cv_bridge/cv_bridge.h"
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
+
+#include <boost/foreach.hpp>
 
 // GTSAM related includes.
 #include <gtsam/navigation/CombinedImuFactor.h>
@@ -67,6 +71,8 @@ std::string vignetteFile = "";
 std::string gammaFile = "";
 std::string configFile = "";
 std::string groundTruthFile = "";
+std::string bagFile = "";
+double bagOffset = 0.0;
 
 bool useSampleOutput=false;
 
@@ -160,6 +166,20 @@ void parseArgument(char* arg)
 		return;
 	}
 
+	if(1==sscanf(arg,"bag=%s",buf))
+	{
+		bagFile = buf;
+		printf("loading bag from %s!\n", bagFile.c_str());
+		return;
+	}
+
+	if(1==sscanf(arg,"bag_offset=%s",buf))
+	{
+		bagOffset = atof(buf);
+		printf("Bag offset %f!\n", bagOffset);
+		return;
+	}
+
 	printf("could not parse argument \"%s\"!!\n", arg);
 }
 
@@ -170,7 +190,10 @@ FullSystem* fullSystem = 0;
 Undistort* undistorter = 0;
 int frameID = 0;
 
-void vidCb(const sensor_msgs::ImageConstPtr img)
+sensor_msgs::ImageConstPtr imageMsg;
+std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
+
+void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vimuData)
 {
 	cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 	assert(cv_ptr->image.type() == CV_8U);
@@ -198,12 +221,61 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 
 }
 
+void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::GroundTruthIterator &groundtruthIterator)
+{
+	// 3dm imu output per g. 1g=9.80665 according to datasheet
+    const double g3dm = 9.80665;
+    const bool bAccMultiply98 = config.GetAccMultiply9p8();
+    const double nAccMultiplier = config.GetAccMultiply9p8() ? g3dm : 1;
+
+	static double nPreviousImageTimestamp = -1;
+	bool bdata = msgsync.getRecentMsgs(imageMsg, vimuMsg);
+
+	if (bdata)
+	{
+		std::vector<dso_vi::IMUData> vimuData;
+		vimuData.reserve(vimuMsg.size());
+
+		for (sensor_msgs::ImuConstPtr &imuMsg: vimuMsg)
+		{
+			vimuData.push_back(
+				dso_vi::IMUData(
+					imuMsg->angular_velocity.x, imuMsg->angular_velocity.y, imuMsg->angular_velocity.z,
+					imuMsg->linear_acceleration.x * nAccMultiplier,
+					imuMsg->linear_acceleration.y * nAccMultiplier,
+					imuMsg->linear_acceleration.z * nAccMultiplier,
+					imuMsg->header.stamp.toSec()
+				)
+			);
+		}
+		ROS_INFO("time: %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
+
+		if (nPreviousImageTimestamp > 0)
+		{
+			// read the groundtruth pose between the two camera poses
+			// the groundtruth timestamp are in nano seconds
+			// gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
+			// 	round(nPreviousImageTimestamp*1e9), 
+			// 	round(imageMsg->header.stamp.toSec()*1e9)
+			// );
+			// ROS_INFO("%f - %f t: %f, %f, %f", 
+			// 	nPreviousImageTimestamp,
+			// 	imageMsg->header.stamp.toSec(),
+			// 	relativePose.translation().x(), 
+			// 	relativePose.translation().y(), 
+			// 	relativePose.translation().z()
+			// );
+		}
+		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
+
+		track(imageMsg, vimuData);
+	}
+}
+
 
 int main( int argc, char** argv )
 {
 	ros::init(argc, argv, "dso_live");
-
-
 
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
 
@@ -265,63 +337,69 @@ int main( int argc, char** argv )
 
     // --------------------------------- Configs --------------------------------- //
     dso_vi::ConfigParam config(configFile);
-    // 3dm imu output per g. 1g=9.80665 according to datasheet
-    const double g3dm = 9.80665;
-    const bool bAccMultiply98 = config.GetAccMultiply9p8();
-    const double nAccMultiplier = config.GetAccMultiply9p8() ? g3dm : 1;
-
+    
     dso_vi::MsgSynchronizer msgsync( config.GetImageDelayToIMU() );
 
-    ros::Subscriber imgSub = nh.subscribe(config._imageTopic, 2, &dso_vi::MsgSynchronizer::imageCallback, &msgsync);
-    ros::Subscriber imuSub = nh.subscribe(config._imuTopic, 200, &dso_vi::MsgSynchronizer::imuCallback, &msgsync);
+    ros::Subscriber imgSub;
+	ros::Subscriber imuSub;
+	rosbag::Bag bag;
+	rosbag::View *bagView = NULL;
+
+    if (bagFile.empty())
+    {
+    	ROS_INFO("Subscribing %s and %s", config._imageTopic.c_str(), config._imuTopic.c_str());
+    	ros::Subscriber imgSub = nh.subscribe(config._imageTopic, 2, &dso_vi::MsgSynchronizer::imageCallback, &msgsync);
+	    ros::Subscriber imuSub = nh.subscribe(config._imuTopic, 200, &dso_vi::MsgSynchronizer::imuCallback, &msgsync);
+    }
+    else
+    {
+    	ROS_INFO("Playing bagfile: %s", bagFile.c_str());
+    	bag.open(bagFile, rosbag::bagmode::Read);
+    	std::vector<std::string> topics;
+	    std::string imutopic = config._imuTopic;
+	    std::string imagetopic = config._imageTopic;
+	    topics.push_back(imagetopic);
+	    topics.push_back(imutopic);
+	    
+	    rosbag::View tempBagView(bag, rosbag::TopicQuery(topics));
+	    ros::Time startTime = tempBagView.getBeginTime() + ros::Duration(bagOffset);
+	
+	    bagView = new rosbag::View(bag, rosbag::TopicQuery(topics), startTime, ros::TIME_MAX);
+
+	    ROS_INFO("BAG starts at: %f", bagView->getBeginTime().toSec());
+	}
+	    
 
     dso_vi::GroundTruthIterator groundtruthIterator(groundTruthFile);
 
-    sensor_msgs::ImageConstPtr imageMsg;
-    std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
-
-    while (ros::ok())
+    if (bagView)
     {
-    	static double nPreviousImageTimestamp = -1;
-    	bool bdata = msgsync.getRecentMsgs(imageMsg, vimuMsg);
-    	
-    	if (bdata)
-    	{
-    		std::vector<dso_vi::IMUData> vimuData;
-    		for (sensor_msgs::ImuConstPtr &imuMsg: vimuMsg)
-    		{
-    			vimuData.push_back(
-    				dso_vi::IMUData(
-    					imuMsg->angular_velocity.x, imuMsg->angular_velocity.y, imuMsg->angular_velocity.z,
-    					imuMsg->linear_acceleration.x * nAccMultiplier,
-    					imuMsg->linear_acceleration.y * nAccMultiplier,
-    					imuMsg->linear_acceleration.z * nAccMultiplier,
-    					imuMsg->header.stamp.toSec()
-    				)
-    			);
-    		}
-    		ROS_INFO("%ld IMU message between the images", vimuData.size());
-
-    		if (nPreviousImageTimestamp > 0)
-    		{
-    			// read the groundtruth pose between the two camera poses
-    			// the groundtruth timestamp are in nano seconds
-    			gtsam::Pose3 relativePose = groundtruthIterator.getPoseBetween(
-    				round(nPreviousImageTimestamp*1e9), 
-    				round(imageMsg->header.stamp.toSec()*1e9)
-    			);
-    			ROS_INFO("%f - %f t: %f, %f, %f", 
-    				nPreviousImageTimestamp,
-    				imageMsg->header.stamp.toSec(),
-    				relativePose.translation().x(), 
-    				relativePose.translation().y(), 
-    				relativePose.translation().z()
-    			);
-    		}
-    		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
-    	}
-    	ros::spinOnce();
-    }
+    	BOOST_FOREACH(rosbag::MessageInstance const m, *bagView)
+	    {
+	        sensor_msgs::ImuConstPtr simu = m.instantiate<sensor_msgs::Imu>();
+	        if(simu!=NULL)
+	        {
+	            msgsync.imuCallback(simu);
+	        }
+	        sensor_msgs::ImageConstPtr simage = m.instantiate<sensor_msgs::Image>();
+	        if(simage!=NULL)
+	        {
+	            msgsync.imageCallback(simage);
+	        }
+	    	
+	    	step(msgsync, config, groundtruthIterator);
+	    }
+	}
+	else
+	{
+		ros::Rate rate(10000);
+    	while (ros::ok())
+	    {
+    		step(msgsync, config, groundtruthIterator);
+			rate.sleep();
+    		ros::spinOnce();
+		}
+	}
 
     for(IOWrap::Output3DWrapper* ow : fullSystem->outputWrapper)
     {
@@ -331,6 +409,8 @@ int main( int argc, char** argv )
 
     delete undistorter;
     delete fullSystem;
+
+    delete bagView;
 
 	return 0;
 }
