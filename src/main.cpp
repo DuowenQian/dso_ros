@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdexcept>
 
 #include "util/settings.h"
 #include "FullSystem/FullSystem.h"
@@ -258,11 +259,21 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t previousState;
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t currentState;
 
-			gtsam::Pose3 relativePose = groundtruthIterator.getGroundTruthBetween(
-				round(nPreviousImageTimestamp*1e9), 
-				round(imageMsg->header.stamp.toSec()*1e9),
-				previousState, currentState
-			);
+			gtsam::Pose3 relativePose;
+			try
+			{
+				relativePose = groundtruthIterator.getGroundTruthBetween(
+					round(nPreviousImageTimestamp*1e9), 
+					round(imageMsg->header.stamp.toSec()*1e9),
+					previousState, currentState
+				);
+			}
+			catch (std::exception e)
+			{
+				std::cerr << e.what() << std::endl;
+				std::cout << "Ran out of groundtruth, exitting..." << std::endl;
+			}
+			
 			ROS_INFO("%f - %f t: %f, %f, %f", 
 				nPreviousImageTimestamp,
 				imageMsg->header.stamp.toSec(),
