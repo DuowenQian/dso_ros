@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   rosbag
 )
 
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 # set(EXECUTABLE_OUTPUT_PATH ＄{PROJECT_SOURCE_DIR}/bin)
 
 set(DSO_PATH $ENV{DSO_PATH})
@@ -41,7 +42,7 @@ include(GtsamTesting)
 find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
 # find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
-set(DSO_LIBRARY ${DSO_PATH}/build/lib/libdsoDebug.so)
+set(DSO_LIBRARY ${DSO_PATH}/build/lib/libdso.so)
 message("DSO_LIB " ${DSO_LIBRARY})
 
 find_package(Boost COMPONENTS system thread) 

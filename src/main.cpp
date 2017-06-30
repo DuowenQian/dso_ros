@@ -222,7 +222,7 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
 
 }
 
-void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::GroundTruthIterator &groundtruthIterator)
+int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::GroundTruthIterator &groundtruthIterator)
 {
 	// 3dm imu output per g. 1g=9.80665 according to datasheet
     const double g3dm = 9.80665;
@@ -249,13 +249,11 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 				)
 			);
 		}
-		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
+//		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
 
 		if (nPreviousImageTimestamp > 0)
 		{
 			// read the groundtruth pose between the two camera poses
-			// the groundtruth timestamp are in nano seconds
-			
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t previousState;
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t currentState;
 
@@ -263,8 +261,7 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 			try
 			{
 				relativePose = groundtruthIterator.getGroundTruthBetween(
-					round(nPreviousImageTimestamp*1e9), 
-					round(imageMsg->header.stamp.toSec()*1e9),
+					nPreviousImageTimestamp, imageMsg->header.stamp.toSec(),
 					previousState, currentState
 				);
 			}
@@ -272,20 +269,25 @@ void step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi:
 			{
 				std::cerr << e.what() << std::endl;
 				std::cout << "Ran out of groundtruth, exitting..." << std::endl;
+				return 1;
 			}
-			
-			ROS_INFO("%f - %f t: %f, %f, %f", 
-				nPreviousImageTimestamp,
-				imageMsg->header.stamp.toSec(),
-				relativePose.translation().x(), 
-				relativePose.translation().y(), 
-				relativePose.translation().z()
+			ROS_INFO("GT VS CAM, Start %f, End %f",
+					 (previousState.timestamp - nPreviousImageTimestamp)*1e3,
+					 (currentState.timestamp - imageMsg->header.stamp.toSec())*1e3
 			);
+//			ROS_INFO("%f - %f t: %f, %f, %f",
+//				nPreviousImageTimestamp,
+//				imageMsg->header.stamp.toSec(),
+//				relativePose.translation().x(),
+//				relativePose.translation().y(),
+//				relativePose.translation().z()
+//			);
 		}
 		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
 
-		track(imageMsg, vimuData);
+//		track(imageMsg, vimuData);
 	}
+	return 0;
 }
 
 
@@ -403,7 +405,10 @@ int main( int argc, char** argv )
 	            msgsync.imageCallback(simage);
 	        }
 	    	
-	    	step(msgsync, config, groundtruthIterator);
+	    	if (step(msgsync, config, groundtruthIterator))
+			{
+				break;
+			}
 	    }
 	}
 	else
@@ -411,7 +416,10 @@ int main( int argc, char** argv )
 		ros::Rate rate(10000);
     	while (ros::ok())
 	    {
-    		step(msgsync, config, groundtruthIterator);
+    		if (step(msgsync, config, groundtruthIterator))
+			{
+				break;
+			}
 			rate.sleep();
     		ros::spinOnce();
 		}
