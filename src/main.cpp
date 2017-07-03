@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdexcept>
+#include <iostream>
+#include <fstream>
 
 #include "util/settings.h"
 #include "FullSystem/FullSystem.h"
@@ -67,6 +69,7 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/inference/Symbol.h>
 
+
 std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
@@ -76,6 +79,9 @@ std::string bagFile = "";
 double bagOffset = 0.0;
 
 bool useSampleOutput=false;
+
+std::ofstream angleComparisonFile;
+gtsam::Pose3 relativePose;
 
 using namespace dso;
 
@@ -194,7 +200,7 @@ int frameID = 0;
 sensor_msgs::ImageConstPtr imageMsg;
 std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
 
-void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vimuData)
+void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vimuData, dso_vi::ConfigParam &config)
 {
 	cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 	assert(cv_ptr->image.type() == CV_8U);
@@ -207,6 +213,7 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
 		delete fullSystem;
 		for(IOWrap::Output3DWrapper* ow : wraps) ow->reset();
 		fullSystem = new FullSystem();
+//        fullSystem->Rbc = config.GetEigTbc().block<3,3>(0,0);
 		fullSystem->linearizeOperation=false;
 		fullSystem->outputWrapper = wraps;
 	    if(undistorter->photometricUndist != 0)
@@ -216,8 +223,77 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
 
 	MinimalImageB minImg((int)cv_ptr->image.cols, (int)cv_ptr->image.rows,(unsigned char*)cv_ptr->image.data);
 	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f);
-	fullSystem->addActiveFrame(undistImg, frameID);
-	frameID++;
+	fullSystem->addActiveFrame(undistImg, frameID, vimuData, img->header.stamp.toSec(), config);
+
+    frameID++;
+
+     //-------------------- Get relative pose -------------------- //
+    std::vector<FrameShell*> allFrameHistory = fullSystem->getAllFrameHistory();
+    if (!fullSystem->initialized || allFrameHistory.size() < 100)
+    {
+        return;
+    }
+    FrameShell* scurrent = allFrameHistory[allFrameHistory.size()-1];
+    FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];
+    if (!scurrent || !slast || !scurrent->poseValid || !slast->poseValid)
+    {
+        return;
+    }
+    SE3 scurrent_2_slast = slast->camToWorld.inverse() * scurrent->camToWorld;
+	// predicted by DSO
+	Eigen::Quaternion<double> quaternionDSO = scurrent_2_slast.so3().unit_quaternion();
+	// predicted by IMU
+    gtsam::Vector3 gyroBias(-0.002153, 0.020744, 0.075806);
+    gtsam::Vector3 acceleroBias(-0.013337, 0.103464, 0.093086);
+    gtsam::imuBias::ConstantBias biasPrior(acceleroBias, gyroBias);
+    PreintegrationType *imu_preintegrated = new PreintegratedImuMeasurements(scurrent->correspondingfh->imuParams, biasPrior);
+
+    Eigen::Matrix<double,3,3> Rbc = config.GetEigTbc().block<3,3>(0,0);
+
+
+
+	double old_timestamp = slast->viTimestamp;
+	for(dso_vi::IMUData  imudata: vimuData)
+	{
+		dso::Mat61 rawimudata;
+		rawimudata <<   imudata._a(0), imudata._a(1), imudata._a(2),
+                        imudata._g(0), imudata._g(1), imudata._g(2);
+
+//        rawimudata.head<3>() = Rbc * rawimudata.head<3>();
+//        rawimudata.tail<3>() = Rbc * rawimudata.tail<3>();
+
+        std::cout << "----------------------------------------------------" << std::endl;
+        std::cout << "Data: ";
+        for (int i = 0; i < 6; i++)
+        {
+            std::cout << rawimudata(i) << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << "Timestamp: " << std::fixed << imudata._t << ", " << old_timestamp << std::endl;
+        std::cout << "----------------------------------------------------" << std::endl;
+        double dt = (imudata._t - old_timestamp);
+        if (dt >= 0.0001) {
+            imu_preintegrated->integrateMeasurement(
+                    rawimudata.head<3>(),
+                    rawimudata.tail<3>(),
+                    dt
+            );
+        }
+		old_timestamp = imudata._t;
+	}
+
+    gtsam::Rot3 gtsamRbc = gtsam::Rot3(Rbc);
+    gtsam::Rot3 gtsamRcb = gtsamRbc.inverse();
+    Eigen::Quaternion<double> quaternionIMU = gtsamRcb.compose( imu_preintegrated->deltaRij() ).compose(gtsamRbc).toQuaternion();
+
+    // from groundtruth
+    Eigen::Quaternion<double> quaternionGT = gtsamRcb.compose( relativePose.rotation() ).compose(gtsamRbc).toQuaternion();
+
+    angleComparisonFile << quaternionDSO.x() << ", " << quaternionDSO.y() << ", " << quaternionDSO.z() << ", "
+                        << quaternionIMU.x() << ", " << quaternionIMU.y() << ", " << quaternionIMU.z() << ", "
+                        << quaternionGT.x() << ", " << quaternionGT.y() << ", " << quaternionGT.z()
+                        << std::endl;
+
 	delete undistImg;
 
 }
@@ -249,7 +325,7 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 				)
 			);
 		}
-//		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
+		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
 
 		if (nPreviousImageTimestamp > 0)
 		{
@@ -257,7 +333,6 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t previousState;
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t currentState;
 
-			gtsam::Pose3 relativePose;
 			try
 			{
 				relativePose = groundtruthIterator.getGroundTruthBetween(
@@ -285,7 +360,7 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 		}
 		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
 
-//		track(imageMsg, vimuData);
+		track(imageMsg, vimuData, config);
 	}
 	return 0;
 }
@@ -357,6 +432,9 @@ int main( int argc, char** argv )
     dso_vi::ConfigParam config(configFile);
     
     dso_vi::MsgSynchronizer msgsync( config.GetImageDelayToIMU() );
+
+    // logging
+    angleComparisonFile.open("angle_comparison.txt");
 
     ros::Subscriber imgSub;
 	ros::Subscriber imuSub;
@@ -435,6 +513,8 @@ int main( int argc, char** argv )
     delete fullSystem;
 
     delete bagView;
+
+    angleComparisonFile.close();
 
 	return 0;
 }
