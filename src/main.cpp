@@ -213,7 +213,7 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
 		delete fullSystem;
 		for(IOWrap::Output3DWrapper* ow : wraps) ow->reset();
 		fullSystem = new FullSystem();
-//        fullSystem->Rbc = config.GetEigTbc().block<3,3>(0,0);
+        fullSystem->setTbc(config.GetEigTbc());
 		fullSystem->linearizeOperation=false;
 		fullSystem->outputWrapper = wraps;
 	    if(undistorter->photometricUndist != 0)
@@ -408,12 +408,15 @@ int main( int argc, char** argv )
             (int)undistorter->getSize()[1],
             undistorter->getK().cast<float>());
 
+	// --------------------------------- Configs --------------------------------- //
+	dso_vi::ConfigParam config(configFile);
 
-    fullSystem = new FullSystem();
+	fullSystem = new FullSystem();
     fullSystem->linearizeOperation=false;
+	fullSystem->setTbc(config.GetEigTbc());
 
 
-    if(!disableAllDisplay)
+	if(!disableAllDisplay)
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
 	    		 (int)undistorter->getSize()[0],
 	    		 (int)undistorter->getSize()[1]));
@@ -428,9 +431,6 @@ int main( int argc, char** argv )
 
     ros::NodeHandle nh;
 
-    // --------------------------------- Configs --------------------------------- //
-    dso_vi::ConfigParam config(configFile);
-    
     dso_vi::MsgSynchronizer msgsync( config.GetImageDelayToIMU() );
 
     // logging
