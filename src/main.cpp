@@ -200,7 +200,8 @@ int frameID = 0;
 sensor_msgs::ImageConstPtr imageMsg;
 std::vector<sensor_msgs::ImuConstPtr> vimuMsg;
 
-void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vimuData, dso_vi::ConfigParam &config)
+void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vimuData,
+		   dso_vi::ConfigParam &config, dso_vi::GroundTruthIterator::ground_truth_measurement_t groundtruth)
 {
 	cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 	assert(cv_ptr->image.type() == CV_8U);
@@ -223,7 +224,7 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
 
 	MinimalImageB minImg((int)cv_ptr->image.cols, (int)cv_ptr->image.rows,(unsigned char*)cv_ptr->image.data);
 	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f);
-	fullSystem->addActiveFrame(undistImg, frameID, vimuData, img->header.stamp.toSec(), config);
+	fullSystem->addActiveFrame(undistImg, frameID, vimuData, img->header.stamp.toSec(), config, groundtruth);
 
     frameID++;
 
@@ -357,10 +358,9 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 //				relativePose.translation().y(),
 //				relativePose.translation().z()
 //			);
+			track(imageMsg, vimuData, config, currentState);
 		}
 		nPreviousImageTimestamp = imageMsg->header.stamp.toSec();
-
-		track(imageMsg, vimuData, config);
 	}
 	return 0;
 }
