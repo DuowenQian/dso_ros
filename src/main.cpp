@@ -327,7 +327,7 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 			);
 		}
 		ROS_INFO("time- %f, %ld IMU message between the images", imageMsg->header.stamp.toSec(), vimuData.size());
-
+		ROS_INFO("Cam- %f. %f, IMU- %f, %f", nPreviousImageTimestamp, imageMsg->header.stamp.toSec(), vimuData[0]._t, vimuData.back()._t);
 		if (nPreviousImageTimestamp > 0)
 		{
 			// read the groundtruth pose between the two camera poses
