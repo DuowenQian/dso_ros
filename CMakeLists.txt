@@ -63,6 +63,7 @@ include_directories(
   ${PROJECT_SOURCE_DIR}/src/MsgSync
   
   ${DSO_PATH}/src
+  ${DSO_PATH}/src/util
   ${DSO_PATH}/thirdparty/Sophus
   
   ${Pangolin_INCLUDE_DIRS}
@@ -87,7 +88,7 @@ target_link_libraries(dso_live
 	gtsam
 	${Pangolin_LIBRARIES} 
 	${catkin_LIBRARIES} 
-	${OpenCV_LIBS} 
-	# boost_system boost_thread 
+	${OpenCV_LIBS}
+	boost_system boost_thread
 )
 

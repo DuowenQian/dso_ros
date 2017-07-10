@@ -247,7 +247,10 @@ void track(const sensor_msgs::ImageConstPtr img, std::vector<dso_vi::IMUData> vi
     gtsam::Vector3 gyroBias(-0.002153, 0.020744, 0.075806);
     gtsam::Vector3 acceleroBias(-0.013337, 0.103464, 0.093086);
     gtsam::imuBias::ConstantBias biasPrior(acceleroBias, gyroBias);
-    PreintegrationType *imu_preintegrated = new PreintegratedImuMeasurements(scurrent->correspondingfh->imuParams, biasPrior);
+    PreintegrationType *imu_preintegrated = new PreintegratedImuMeasurements(
+		dso_vi::getIMUParams(),
+		biasPrior
+	);
 
     Eigen::Matrix<double,3,3> Rbc = config.GetEigTbc().block<3,3>(0,0);
 
