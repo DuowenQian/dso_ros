@@ -1,4 +1,4 @@
-/home/sicong/clion-2017.1.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/sicong/dso_ros_ws/src/dso_ros
+/home/sicong/clion-2017.1.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/sicong/dso_ws/src/dso_ros
 -- The C compiler identification is GNU 4.8.4
 -- The CXX compiler identification is GNU 4.8.4
 -- Check for working C compiler: /usr/bin/cc
@@ -31,4 +31,4 @@ CMake Error at CMakeLists.txt:7 (find_package):
 
 
 -- Configuring incomplete, errors occurred!
-See also "/home/sicong/dso_ros_ws/src/dso_ros/cmake-build-debug/CMakeFiles/CMakeOutput.log".
+See also "/home/sicong/dso_ws/src/dso_ros/cmake-build-debug/CMakeFiles/CMakeOutput.log".

@@ -417,7 +417,7 @@ int main( int argc, char** argv )
 	fullSystem = new FullSystem();
     fullSystem->linearizeOperation=false;
 	fullSystem->setTbc(config.GetEigTbc());
-
+    fullSystem->setBiasEstimate(config.GetEigAccBias(), config.GetEigGyroBias());
 
 	if(!disableAllDisplay)
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
