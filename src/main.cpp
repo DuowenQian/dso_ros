@@ -337,19 +337,19 @@ int step(dso_vi::MsgSynchronizer &msgsync, dso_vi::ConfigParam &config, dso_vi::
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t previousState;
 			dso_vi::GroundTruthIterator::ground_truth_measurement_t currentState;
 
-			try
-			{
-				relativePose = groundtruthIterator.getGroundTruthBetween(
-					nPreviousImageTimestamp, imageMsg->header.stamp.toSec(),
-					previousState, currentState
-				);
-			}
-			catch (std::exception e)
-			{
-				std::cerr << e.what() << std::endl;
-				std::cout << "Ran out of groundtruth, exitting..." << std::endl;
-				return 1;
-			}
+			// try
+			// {
+			// 	relativePose = groundtruthIterator.getGroundTruthBetween(
+			// 		nPreviousImageTimestamp, imageMsg->header.stamp.toSec(),
+			// 		previousState, currentState
+			// 	);
+			// }
+			// catch (std::exception e)
+			// {
+			// 	std::cerr << e.what() << std::endl;
+			// 	std::cout << "Ran out of groundtruth, exitting..." << std::endl;
+			// 	return 1;
+			// }
 			ROS_INFO("GT VS CAM, Start %f, End %f",
 					 (previousState.timestamp - nPreviousImageTimestamp)*1e3,
 					 (currentState.timestamp - imageMsg->header.stamp.toSec())*1e3
