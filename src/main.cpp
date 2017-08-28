@@ -77,6 +77,7 @@ std::string configFile = "";
 std::string groundTruthFile = "";
 std::string bagFile = "";
 double bagOffset = 0.0;
+bool addprior;
 
 bool useSampleOutput=false;
 
@@ -414,10 +415,19 @@ int main( int argc, char** argv )
 	// --------------------------------- Configs --------------------------------- //
 	dso_vi::ConfigParam config(configFile);
 
+	dso_vi::accel_noise_sigma = config.Getaccel_noise_sigma();
+	dso_vi::gyro_noise_sigma = config.Getgyro_noise_sigma();
+	dso_vi::accel_bias_rw_sigma = config.Getaccel_bias_rw_sigma();
+	dso_vi::gyro_bias_rw_sigma = config.Getgyro_bias_rw_sigma();
+
 	fullSystem = new FullSystem();
-    fullSystem->linearizeOperation=false;
+    fullSystem->linearizeOperation=true;
 	fullSystem->setTbc(config.GetEigTbc());
     fullSystem->setBiasEstimate(config.GetEigAccBias(), config.GetEigGyroBias());
+	fullSystem->addprior = config.Getaddprior();
+	fullSystem->addimu = config.Getaddimu();
+	fullSystem->WINDOW_SIZE = 40;
+
 
 	if(!disableAllDisplay)
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
