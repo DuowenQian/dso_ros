@@ -39,7 +39,10 @@ include(GtsamMakeConfigFile)
 include(GtsamBuildTypes)
 include(GtsamTesting)
 
-find_package(Eigen3 REQUIRED)
+message("\n\n---- GTSAM includes ${GTSAM_INCLUDE_DIR}")
+message("\n\n---- GTSAM libs ${GTSAM_LIBRARIES}")
+
+#find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
 # find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
 set(DSO_LIBRARY ${DSO_PATH}/build/lib/libdso.so)
@@ -59,6 +62,7 @@ set(SOURCE_FILES
 )
 
 include_directories(
+    
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/src/MsgSync
   
@@ -67,10 +71,11 @@ include_directories(
   ${DSO_PATH}/thirdparty/Sophus
   
   ${Pangolin_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIR}
+  #${EIGEN3_INCLUDE_DIR}
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
-  $(GTSAM_INCLUDE_DIR)
+
+  $(GTSAM_INCLUDE_DIR)  
   
 )  
 
@@ -84,8 +89,8 @@ catkin_package(
 add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 add_dependencies(dso_live ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(dso_live 
-	${DSO_LIBRARY} 
 	gtsam
+  	${DSO_LIBRARY} 
 	${Pangolin_LIBRARIES} 
 	${catkin_LIBRARIES} 
 	${OpenCV_LIBS}

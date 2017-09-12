@@ -22,8 +22,14 @@
 */
 
 
-
-
+/* 
+ *
+ * If CMake can't find mkl:
+ * << source /opt/intel/bin/compilervars.sh intel64
+ */
+#ifndef MKL_BLAS
+#define MKL_BLAS MKL_DOMAIN_BLAS
+#endif
 
 #include <locale.h>
 #include <signal.h>
