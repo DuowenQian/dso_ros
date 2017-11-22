@@ -159,6 +159,7 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 
 	MinimalImageB minImg((int)cv_ptr->image.cols, (int)cv_ptr->image.rows,(unsigned char*)cv_ptr->image.data);
 	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f);
+	undistImg->timestamp=cv_ptr->header.stamp.toSec();
 	fullSystem->addActiveFrame(undistImg, frameID);
 	frameID++;
 	delete undistImg;
@@ -224,6 +225,8 @@ int main( int argc, char** argv )
     ros::Subscriber imgSub = nh.subscribe("/camera/rgb/image_mono", 1, &vidCb);
 
     ros::spin();
+
+    fullSystem->printResult("result1.txt");
 
     for(IOWrap::Output3DWrapper* ow : fullSystem->outputWrapper)
     {
