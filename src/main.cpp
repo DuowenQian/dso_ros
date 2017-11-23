@@ -36,6 +36,7 @@
 #include "util/Undistort.h"
 #include "IOWrapper/Pangolin/PangolinDSOViewer.h"
 #include "IOWrapper/OutputWrapper/SampleOutputWrapper.h"
+#include "ROSOutputPublisher.h"
 
 
 #include <ros/ros.h>
@@ -207,11 +208,14 @@ int main( int argc, char** argv )
     fullSystem = new FullSystem();
     fullSystem->linearizeOperation=false;
 
+    ros::NodeHandle nh;
 
-    if(!disableAllDisplay)
+    if(!disableAllDisplay){
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
 	    		 (int)undistorter->getSize()[0],
 	    		 (int)undistorter->getSize()[1]));
+    	fullSystem->outputWrapper.push_back(new IOWrap::ROSOutputPublisher(nh)); //create a new entry in outputWrapper for ROSOutputPublisher
+    }
 
 
     if(useSampleOutput)
@@ -221,7 +225,6 @@ int main( int argc, char** argv )
     if(undistorter->photometricUndist != 0)
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
 
-    ros::NodeHandle nh;
     ros::Subscriber imgSub = nh.subscribe("/camera/rgb/image_mono", 1, &vidCb);
 
     ros::spin();

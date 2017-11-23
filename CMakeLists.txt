@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   cv_bridge
+  tf
 )
 
 # set(EXECUTABLE_OUTPUT_PATH ＄{PROJECT_SOURCE_DIR}/bin)
@@ -39,21 +40,34 @@ find_package(Boost COMPONENTS system thread)
 find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
 message("DSO_LIB " ${DSO_LIBRARY})
 
-find_package(Boost COMPONENTS system thread) 
 
-# SSE flags
-# rosbuild_check_for_sse()
+catkin_package(
+#  INCLUDE_DIRS include
+#  LIBRARIES active_slam_teleop
+  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs cv_bridge tf
+#  DEPENDS system_lib
+)
+
+###########
+## Build ##
+###########
+
 set(CMAKE_CXX_FLAGS
    "${SSE_FLAGS} -O2 -g -std=c++0x -fno-omit-frame-pointer"
 )
 
 set(CMAKE_CXX_FLAGS "-std=c++14 -march=native")
 
+set(ros_IOWrapper_source
+  ${PROJECT_SOURCE_DIR}/src/ROSOutputPublisher.cpp
+)
+
 set(SOURCE_FILES         
   src/main.cpp
 )
 
 include_directories(
+  include
   ${PROJECT_SOURCE_DIR}/src
   ${DSO_PATH}/src
   ${DSO_PATH}/thirdparty/Sophus
@@ -64,14 +78,9 @@ include_directories(
   
 )  
 
-catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES active_slam_teleop
-#  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs
-#  DEPENDS system_lib
-)
 
 add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 add_dependencies(dso_live ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS} boost_system boost_thread)
+add_library(ros_IOWrapper ${ros_IOWrapper_source})
+target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS} ros_IOWrapper boost_system boost_thread tf)
 
