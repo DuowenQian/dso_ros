@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   cv_bridge
   tf
+  message_filters
 )
 
 # set(EXECUTABLE_OUTPUT_PATH ＄{PROJECT_SOURCE_DIR}/bin)
@@ -44,7 +45,7 @@ message("DSO_LIB " ${DSO_LIBRARY})
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES active_slam_teleop
-  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs cv_bridge tf
+  CATKIN_DEPENDS geometry_msgs roscpp rospy std_msgs cv_bridge tf message_filters
 #  DEPENDS system_lib
 )
 
