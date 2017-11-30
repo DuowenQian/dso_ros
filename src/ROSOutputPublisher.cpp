@@ -122,7 +122,7 @@ namespace IOWrap
 	    double camY = m(1,3);
             double camZ = m(2,3);
 
-	    /* camera orientation */
+	    /* camera orientation*/
 	    /* http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/ */
 	    double numX = 1 + m(0,0) - m(1,1) - m(2,2);
 	    double numY = 1 - m(0,0) + m(1,1) - m(2,2);

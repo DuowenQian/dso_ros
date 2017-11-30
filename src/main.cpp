@@ -141,14 +141,20 @@ FullSystem* fullSystem = 0;
 Undistort* undistorter = 0;
 int frameID = 0;
 
-void vidCb(const sensor_msgs::ImageConstPtr img)
+void vidCb(const sensor_msgs::ImageConstPtr msgRGB, const sensor_msgs::ImageConstPtr msgD)
 {
-	cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
-	assert(cv_ptr->image.type() == CV_8U);
-	assert(cv_ptr->image.channels() == 1);
+	cv_bridge::CvImagePtr cv_ptrRGB = cv_bridge::toCvCopy(msgRGB, sensor_msgs::image_encodings::MONO8); //convert image to mono
+	//toCvCopy creates a copy of the image data from the ROS message
+	cv_bridge::CvImageConstPtr cv_ptrD = cv_bridge::toCvShare(msgD);
+	// toCvShare will point the returned cv::Mat at the ROS message data, avoiding a copy.
+	// not allowed to modify the returned CvImage
+	assert(cv_ptrRGB->image.type() == CV_8U); // Mat::type returns the type of a matrix element.
+	assert(cv_ptrRGB->image.channels() == 1); // Mat::channels returns number of matrix channels.
+	//assert will call abort if the expression inside the brackets is false.
+	cv::Mat depth_image = cv_ptrD->image;
+	// TODO assert Depth image
 
-
-	if(setting_fullResetRequested)
+	if(setting_fullResetRequested) // TODO write setting_fullResetRequested condition for when tracking is lost or when too much rotation.
 	{
 		std::vector<IOWrap::Output3DWrapper*> wraps = fullSystem->outputWrapper;
 		delete fullSystem;
@@ -161,10 +167,12 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 		setting_fullResetRequested=false;
 	}
 
-	MinimalImageB minImg((int)cv_ptr->image.cols, (int)cv_ptr->image.rows,(unsigned char*)cv_ptr->image.data);
-	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f);
-	undistImg->timestamp=cv_ptr->header.stamp.toSec();
-	fullSystem->addActiveFrame(undistImg, frameID);
+	MinimalImageB minImg((int)cv_ptrRGB->image.cols, (int)cv_ptrRGB->image.rows,(unsigned char*)cv_ptrRGB->image.data); //see MinimalImage.h
+	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f); // undistort minimal img and store as ImageAndExposure object
+	undistImg->timestamp=cv_ptrRGB->header.stamp.toSec(); // set timestamp
+	fullSystem->addActiveFrame(undistImg, depth_image, frameID); //DO THE THING! see FullSystem.cpp
+	// TODO addActiveFrame(undistImg, cv_ptrD, frameID);
+
 	frameID++;
 	delete undistImg;
 
@@ -176,13 +184,13 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 
 int main( int argc, char** argv )
 {
-	ros::init(argc, argv, "dso_live");
+	ros::init(argc, argv, "dso_live"); //Initialize ROS node called "dso_live"
 
 
-
+	// Parse input arguments
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
 
-
+	// Set Parameters
 	setting_desiredImmatureDensity = 1000;
 	setting_desiredPointDensity = 1200;
 	setting_minFrames = 5;
@@ -199,7 +207,7 @@ int main( int argc, char** argv )
 	setting_affineOptModeB = 0;
 
 
-
+	// Get undistorter
     undistorter = Undistort::getUndistorterForFile(calib, gammaFile, vignetteFile);
 
     setGlobalCalib(
@@ -207,17 +215,19 @@ int main( int argc, char** argv )
             (int)undistorter->getSize()[1],
             undistorter->getK().cast<float>());
 
-
+    // Initialize FullSystem ...
+    // This will initialize coarseDistanceMap, coarseTracker, coarseTracker_forNewKF, coarseInitializer, pixelSelector,
+    // and ef (Energy Functional) amongst other things
     fullSystem = new FullSystem();
     fullSystem->linearizeOperation=false;
 
-    ros::NodeHandle nh;
+    ros::NodeHandle nh; //Start the Node
 
     if(!disableAllDisplay){
 	    fullSystem->outputWrapper.push_back(new IOWrap::PangolinDSOViewer(
 	    		 (int)undistorter->getSize()[0],
-	    		 (int)undistorter->getSize()[1]));
-    	fullSystem->outputWrapper.push_back(new IOWrap::ROSOutputPublisher(nh)); //create a new entry in outputWrapper for ROSOutputPublisher
+	    		 (int)undistorter->getSize()[1])); // create a new entry in outputWrapper for ROSOutputPublisher
+    	fullSystem->outputWrapper.push_back(new IOWrap::ROSOutputPublisher(nh)); // create a new entry in outputWrapper for ROSOutputPublisher
     }
 
 
@@ -228,7 +238,17 @@ int main( int argc, char** argv )
     if(undistorter->photometricUndist != 0)
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
 
-    ros::Subscriber imgSub = nh.subscribe("/camera/rgb/image_mono", 1, &vidCb);
+    // SUBSCRIBER
+
+    //ros::Subscriber imgSub = nh.subscribe("/camera/rgb/image_mono", 1, &vidCb);
+
+    // TEST
+    message_filters::Subscriber<sensor_msgs::Image> rgb_sub(nh, "/camera/rgb/image_mono", 1);
+    message_filters::Subscriber<sensor_msgs::Image> depth_sub(nh, "/camera/depth_registered/sw_registered/image_rect_raw", 1);
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> sync_pol;
+    message_filters::Synchronizer<sync_pol> sync(sync_pol(10), rgb_sub,depth_sub); //where sync_pol(10) is a constructor and 10 is queue_size
+    sync.registerCallback(boost::bind(&vidCb,_1,_2));
+    // TEST
 
     ros::spin();
 
