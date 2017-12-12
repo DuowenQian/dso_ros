@@ -24,7 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 # set(EXECUTABLE_OUTPUT_PATH ＄{PROJECT_SOURCE_DIR}/bin)
 
-set(DSO_PATH /home/duo/dso)
+set(DSO_PATH /home/duo/dso_stereo)
 message("\n\n---- LOOKING FOR DSO at\n\"${DSO_PATH}\"")
 
 
@@ -32,13 +32,13 @@ find_package(Pangolin 0.2 REQUIRED)
 message("\n\n---- FOUND Pangolin Headers at\n\"${Pangolin_INCLUDE_DIRS}\"")
 message("---- FOUND Pangolin Libs at\n\"${Pangolin_LIBRARIES}\"")
 
-find_package(OpenCV 2.4 REQUIRED)
+find_package(OpenCV 3 REQUIRED)
 message("\n\n---- FOUND OpenCV Headers at\n\"${OpenCV_INCLUDE_DIRS}\"")
 message("---- FOUND OpenCV Libs at\n\"${OpenCV_LIBS}\"")
 
 find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
-find_library(DSO_LIBRARY dsoDebug ${DSO_PATH}/build/lib)
+find_library(DSO_LIBRARY dso ${DSO_PATH}/build/lib)
 message("DSO_LIB " ${DSO_LIBRARY})
 
 
@@ -79,9 +79,9 @@ include_directories(
   
 )  
 
-
 add_executable(dso_live src/main.cpp ${SOURCE_FILES})
 add_dependencies(dso_live ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_library(ros_IOWrapper ${ros_IOWrapper_source})
-target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS} ros_IOWrapper boost_system boost_thread tf)
+target_link_libraries(ros_IOWrapper ${catkin_LIBRARIES})
+target_link_libraries(dso_live ${DSO_LIBRARY} ${Pangolin_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS} ros_IOWrapper boost_system boost_thread)
 
